@@ -3,6 +3,7 @@ use std::sync::Arc;
 pub struct AppConfig {
     pub api_notion: String,
     pub api_telegram: String,
+    pub api_gemini: String,
     pub chat_id: String,
 }
 

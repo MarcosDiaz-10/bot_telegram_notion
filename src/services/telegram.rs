@@ -2,6 +2,7 @@ pub async fn enviar_mensaje(
     msg: String,
     api_telegram: String,
     chat_id: String,
+    type_parse: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
     let res = client
@@ -12,7 +13,7 @@ pub async fn enviar_mensaje(
         .json(&serde_json::json!({
             "chat_id": chat_id,
             "text": msg,
-            "parse_mode": "MarkdownV2"
+            "parse_mode": type_parse
         }))
         .send()
         .await?;

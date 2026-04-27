@@ -16,7 +16,7 @@ pub async fn get_task_send_message(api_notion: String, api_telegram: String, cha
         count += 1;
     }
 
-    telegram::enviar_mensaje(msg, api_telegram, chat_id)
+    telegram::enviar_mensaje(msg, api_telegram, chat_id, "MarkdownV2".to_string())
         .await
         .unwrap();
 }

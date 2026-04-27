@@ -6,6 +6,7 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 
 use crate::{routes::router, services::jobs::get_task_send_message};
 
+mod handlers;
 mod models;
 mod routes;
 mod services;
@@ -19,6 +20,7 @@ async fn main() {
         api_notion: var("API_NOTION").expect("API_NOTION no encontrada en .env"),
         api_telegram: var("API_TELEGRAM").expect("API_TELEGRAM no encontrada en .env"),
         chat_id: var("CHAT_ID").expect("CHAT_ID no encontrada en .env"),
+        api_gemini: var("API_GEMINI").expect("API_GEMINI no encontrada en .env"),
     };
 
     let shared_state = Arc::new(AppState {
