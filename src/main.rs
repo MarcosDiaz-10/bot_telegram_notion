@@ -1,33 +1,65 @@
 use dotenvy::dotenv;
-use std::env::var;
+use services::{notion, telegram};
+use state::{AppConfig, AppState};
+use std::{env::var, sync::Arc};
+use tokio_cron_scheduler::{Job, JobScheduler};
 
-use crate::{notion::obtener_tareas, telegram::enviar_mensaje};
+use crate::{routes::router, services::jobs::get_task_send_message};
 
-mod notion;
-mod telegram;
+mod models;
+mod routes;
+mod services;
+mod state;
 #[tokio::main]
 
 async fn main() {
     dotenv().expect("No se pudo encontrar el archivo .env");
 
-    let api_notion = var("API_NOTION").expect("API_NOTION no encontrada en .env");
-    let api_telegram = var("API_TELEGRAM").expect("API_TELEGRAM no encontrada en .env");
-    let chat_id = var("CHAT_ID").expect("CHAT_ID no encontrada en .env");
+    let config = AppConfig {
+        api_notion: var("API_NOTION").expect("API_NOTION no encontrada en .env"),
+        api_telegram: var("API_TELEGRAM").expect("API_TELEGRAM no encontrada en .env"),
+        chat_id: var("CHAT_ID").expect("CHAT_ID no encontrada en .env"),
+    };
 
-    let tareas = obtener_tareas(api_notion).await.unwrap();
+    let shared_state = Arc::new(AppState {
+        config,
+        http_client: reqwest::Client::new(),
+    });
 
-    let mut msg = format!(
-        "🏆 *REPORTE TAREAS DE HOY* 🏆 \n \n Sr\\.Diaz, tienes {} tareas \n\n",
-        tareas.len()
-    );
-    let mut count = 1;
-    for tarea in &tareas {
-        msg += &format!(
-            "*{}\\. {}*\n├ ⚡ *Prioridad:* {}\n├ 🛠️ *Tipo:* {}\n└ 🎓 *Curso:* {}\n\n",
-            count, tarea.title, tarea.prioridad, tarea.tipo, tarea.curso
-        );
-        count += 1;
-    }
+    let sched = JobScheduler::new().await.unwrap();
+    let job_reportes_shared_state = Arc::clone(&shared_state);
+    let job_reportes = Job::new_async("0 0 12,17,21 * * *", move |_uuid, _l| {
+        let state = Arc::clone(&job_reportes_shared_state);
+        Box::pin(async move {
+            println!("Ejecutando tarea programada: Enviar reporte de tareas");
+            get_task_send_message(
+                state.config.api_notion.clone(),
+                state.config.api_telegram.clone(),
+                state.config.chat_id.clone(),
+            )
+            .await
+        })
+    });
 
-    enviar_mensaje(msg, api_telegram, chat_id).await.unwrap();
+    let jobs = match job_reportes {
+        Ok(job) => job,
+        Err(e) => {
+            println!("Error al crear el job: {}", e);
+            return;
+        }
+    };
+
+    sched.add(jobs).await.unwrap();
+
+    tokio::spawn(async move {
+        println!("Iniciando scheduler de tareas programadas");
+        sched.start().await.unwrap();
+    });
+
+    let app = router(shared_state.clone());
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    println!("Servidor escuchando en http://0.0.0.0:3000");
+
+    axum::serve(listener, app).await.unwrap();
 }
