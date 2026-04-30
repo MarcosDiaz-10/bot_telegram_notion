@@ -4,7 +4,10 @@ use axum::Json;
 use serde_json::{Value, json};
 
 use crate::{
-    services::{notion::mark_done, telegram::enviar_mensaje},
+    services::{
+        notion::{mark_done, obtener_tareas_gemini},
+        telegram::enviar_mensaje,
+    },
     state::{self, SharedState},
 };
 
@@ -51,30 +54,64 @@ pub async fn analizar_con_gemini(texto: String, state: SharedState) -> Result<()
     );
 
     let body = json!({
-        "system_instruction": {
-            "parts": [{"text": instrucciones_sistema}]
-        },
-        "contents": [{
-            "parts": [{ "text": texto }]
-        }],
-        "tools": [{
-            "functionDeclarations": [{
-                "name": "marcar_tarea_como_completa",
-                "description": "Marca una tarea como completa en la base de datos",
-                "parameters": {
-                    "type": "OBJECT",
-                    "properties": {
-                        "Name": {
-                            "type": "STRING",
-                            "description": "El nombre descriptivo y conciso de la tarea"
+            "system_instruction": {
+                "parts": [{"text": instrucciones_sistema}]
+            },
+            "contents": [{
+                "parts": [{ "text": texto }]
+            }],
+            "tools": [{
+                "functionDeclarations": [{
+                    "name": "marcar_tarea_como_completa",
+                    "description": "Marca una tarea como completa en la base de datos",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "Name": {
+                                "type": "STRING",
+                                "description": "El nombre descriptivo y conciso de la tarea"
+                            },
                         },
-                    },
-                    "required": ["Name"]
+                        "required": ["Name"]
+                    }
+                },
+    {
+                    "name": "obtener_tareas",
+                    "description": "Obtiene la lista de tareas en la base de datos",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "Name": {
+                                "type": "STRING",
+                                "description": "El nombre descriptivo y conciso de la tarea"
+                            },
+                            "Course": {
+                                "type": "STRING",
+                                "description": "El curso al que pertenece la tarea, si es que tiene uno asignado"
+                            },
+                            "Prioridad": {
+                                "type": "STRING",
+                                "description": "La prioridad de la tarea, si es que tiene una asignada"
+                            },
+                            "State": {
+                                "type": "STRING",
+                                "description": "El estado de la tarea, si es que tiene uno asignado"
+                            },
+                            "Type": {
+                                "type": "STRING",
+                                "description": "El tipo de tarea, si es que tiene uno asignado"
+                            },
+                            "Date": {
+                                "type": "STRING",
+                                "description": "La fecha de la tarea"
+                            },
+                        },
+                        "required": ["Name","Course","Prioridad","State","Type","Date"]
+                    }
                 }
-            }
-            ]
-        }]
-    });
+                ]
+            }]
+        });
 
     let res = state
         .http_client
@@ -142,6 +179,25 @@ async fn llamar_funcion_gemini(
         "marcar_tarea_como_completa" => {
             let name = arguments["Name"].as_str().unwrap_or("");
             let str = mark_done(name, state).await?;
+            return Ok(str);
+        }
+        "obtener_tareas" => {
+            let name = arguments["Name"].as_str().unwrap_or("Any");
+            let course = arguments["Course"].as_str().unwrap_or("Any");
+            let prioridad = arguments["Prioridad"].as_str().unwrap_or("Any");
+            let stateGemini = arguments["State"].as_str().unwrap_or("Any");
+            let type_ = arguments["Type"].as_str().unwrap_or("Any");
+            let date = arguments["Date"].as_str().unwrap_or("Any");
+            let str = obtener_tareas_gemini(
+                name.to_string(),
+                course.to_string(),
+                prioridad.to_string(),
+                stateGemini.to_string(),
+                type_.to_string(),
+                date.to_string(),
+                state,
+            )
+            .await?;
             return Ok(str);
         }
         _ => {

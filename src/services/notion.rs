@@ -92,9 +92,14 @@ pub async fn obtener_tareas(
 }
 
 pub async fn obtener_tareas_gemini(
+    name: String,
+    course: String,
+    prioridad: String,
+    stateGemini: String,
+    type_: String,
     date: String,
     state: SharedState,
-) -> Result<Vec<Tarea>, Box<dyn std::error::Error>> {
+) -> Result<String, Box<dyn std::error::Error>> {
     let mut headers = header::HeaderMap::new();
 
     headers.insert(
@@ -110,21 +115,72 @@ pub async fn obtener_tareas_gemini(
         header::HeaderValue::from_static("application/json"),
     );
 
+    let mut and_filters: Vec<Value> = Vec::new();
+
+    if name != "Any" {
+        and_filters.push(json!({
+            "property": "Name",
+            "title": {
+                "contains": name
+            }
+        }));
+    }
+
+    if course != "Any" {
+        and_filters.push(json!({
+            "property": "Course",
+            "select": {
+                "equals": course
+            }
+        }));
+    }
+
+    if date != "Any" {
+        and_filters.push(json!({
+            "property": "Date",
+            "date": {
+                "equals": date
+            }
+        }));
+    }
+
+    if prioridad != "Any" {
+        and_filters.push(json!({
+            "property": "Priority",
+            "select": {
+                "equals": prioridad
+            }
+        }));
+    }
+
+    if stateGemini != "Any" {
+        and_filters.push(json!({
+            "property": "State",
+            "status": {
+                "equals": stateGemini
+            }
+        }));
+    } else {
+        and_filters.push(json!({
+            "property": "State",
+            "status": {
+                "equals": "Not Started"
+            }
+        }));
+    }
+
+    if type_ != "Any" {
+        and_filters.push(json!({
+            "property": "Type",
+            "select": {
+                "equals": type_
+            }
+        }));
+    }
+
     let body = json!({
         "filter": {
-            "and": [{
-                "property": "State",
-                "status": {
-                    "equals": "Not Started"
-                }
-            },
-            {
-                "property": "Date",
-                "date": {
-                    "equals": date
-                }
-            }
-            ]
+            "and": and_filters
 
         },
         "sorts": [
@@ -178,7 +234,20 @@ pub async fn obtener_tareas_gemini(
         }
     }
 
-    Ok(tareas_limpias)
+    let mut msg = format!(
+        "🏆 *TAREAS PENDIENTES* 🏆 \n \n Sr\\.Diaz, tienes {} tareas \n\n",
+        tareas_limpias.len()
+    );
+    let mut count = 1;
+    for tarea in &tareas_limpias {
+        msg += &format!(
+            "*{}\\. {}*\n├ ⚡ *Prioridad:* {}\n├ 🛠️ *Tipo:* {}\n└ 🎓 *Curso:* {}\n\n",
+            count, tarea.title, tarea.prioridad, tarea.tipo, tarea.curso
+        );
+        count += 1;
+    }
+
+    Ok(msg)
 }
 
 pub async fn mark_done(
